@@ -3,7 +3,7 @@ import os
 import sys
 
 # Set environment before importing app modules
-os.environ["GEMINI_API_KEY"] = "AIzaSyDDsKcBLf2oK_1VWfWT5ugTtpA6m5I_NC0"
+os.environ["GEMINI_API_KEY"] = "YOUR_API_KEY"
 # We will use the default Nano model name for now, but we can override it if the API rejects 'nano-banana'
 os.environ["GEMINI_MODEL_NANO"] = "gemini-2.0-flash" 
 
