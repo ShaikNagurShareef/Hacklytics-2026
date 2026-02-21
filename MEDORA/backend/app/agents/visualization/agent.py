@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -11,7 +12,7 @@ from app.agents.visualization.prompts import (
     TUTORIAL_GENERATION_PROMPT,
 )
 from app.agents.visualization.schemas import VisualizationTutorial
-from app.services.llm_client import parse_json_from_text
+from app.services.llm_client import parse_json_from_text, generate_image
 
 logger = logging.getLogger(__name__)
 
@@ -79,26 +80,62 @@ class VisualizationAgent(BaseAgent):
             except ValidationError as e:
                 logger.error(f"Failed to validate Visualization schema: {e}")
 
-        # Format a human-readable markdown response from the JSON
+        # Format: dashboard section (from diagnostic report) + tutorial steps
+        step_images: List[Dict[str, Any]] = []
         if tutorial_data:
             content = f"## 📚 Medical Tutorial: {tutorial_data.get('overview', 'Overview')}\n\n"
+            dashboard = tutorial_data.get("dashboard") or {}
+            if isinstance(dashboard, dict) and (dashboard.get("key_findings") or dashboard.get("summary")):
+                content += "### 📊 Dashboard Summary\n\n"
+                if dashboard.get("summary"):
+                    content += f"**Summary:** {dashboard['summary']}\n\n"
+                if dashboard.get("modality") or dashboard.get("body_region") or dashboard.get("severity"):
+                    content += "| Modality | Body Region | Severity |\n|----------|-------------|----------|\n"
+                    content += f"| {dashboard.get('modality', '—')} | {dashboard.get('body_region', '—')} | {dashboard.get('severity', '—')} |\n\n"
+                if dashboard.get("key_findings"):
+                    content += "**Key findings:**\n"
+                    for f in dashboard["key_findings"]:
+                        content += f"- {f}\n"
+                    content += "\n"
+                if dashboard.get("recommendations"):
+                    content += "**Recommendations:**\n"
+                    for r in dashboard["recommendations"]:
+                        content += f"- {r}\n"
+                    content += "\n"
+                content += "---\n\n"
+            content += "### 📖 Step-by-step tutorial\n\n"
             for step in tutorial_data.get("steps", []):
                 content += f"### Step {step.get('step_number')}: {step.get('title')}\n"
                 content += f"{step.get('explanation')}\n\n"
-                content += f"> 📸 *Visualization Cue: {step.get('image_prompt')}*\n\n"
+                image_prompt = step.get("image_prompt") or ""
+                if image_prompt:
+                    img_bytes = await generate_image(image_prompt, timeout_sec=45)
+                    if img_bytes:
+                        b64 = base64.b64encode(img_bytes).decode("ascii")
+                        content += f"![Step {step.get('step_number')}](data:image/png;base64,{b64})\n\n"
+                        step_images.append({"step_number": step.get("step_number"), "image_base64": b64})
+                    else:
+                        content += f"> 📸 *Visualization Cue: {image_prompt}*\n\n"
+                else:
+                    content += "\n"
         else:
-            # Fallback if it didn't parse into clean JSON
             content = reply_text
-            if not content.startswith("## ") and not "Step" in content:
-                 content = f"## 📚 Medical Tutorial\n\n{content}"
+            if not content.startswith("## ") and "Step" not in content:
+                content = f"## 📚 Medical Tutorial\n\n{content}"
+
+        metadata = {
+            "intent": "tutorial_generation",
+            "session_id": session_id,
+            "timestamp": datetime.now(tz=timezone.utc).isoformat(),
+            "tutorial_data": tutorial_data,
+        }
+        if tutorial_data and tutorial_data.get("dashboard"):
+            metadata["dashboard"] = tutorial_data["dashboard"]
+        if tutorial_data and step_images:
+            metadata["step_images"] = step_images
 
         return AgentResponse(
             agent_name=self.name,
             content=content,
-            metadata={
-                "intent": "tutorial_generation",
-                "session_id": session_id,
-                "timestamp": datetime.now(tz=timezone.utc).isoformat(),
-                "tutorial_data": tutorial_data,
-            },
+            metadata=metadata,
         )

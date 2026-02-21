@@ -2,10 +2,13 @@ import asyncio
 import os
 import sys
 
-# Set environment before importing app modules
-os.environ["GEMINI_API_KEY"] = "YOUR_API_KEY"
-# We will use the default Nano model name for now, but we can override it if the API rejects 'nano-banana'
-os.environ["GEMINI_MODEL_NANO"] = "gemini-2.0-flash" 
+# Prefer .env; only set if not already set (e.g. from .env)
+if "GEMINI_API_KEY" not in os.environ:
+    try:
+        from dotenv import load_dotenv
+        load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
+    except ImportError:
+        pass
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 

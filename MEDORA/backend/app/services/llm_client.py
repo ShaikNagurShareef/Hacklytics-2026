@@ -176,6 +176,46 @@ async def vision_chat(
         raise
 
 
+async def generate_image(
+    prompt: str,
+    model_id: Optional[str] = None,
+    *,
+    timeout_sec: float = 60.0,
+) -> Optional[bytes]:
+    """
+    Generate an image from a text prompt using Nano Banana Pro (Gemini image model).
+    Returns image bytes (PNG) or None if generation fails.
+    """
+    if GEMINI_API_KEY is None:
+        logger.warning("GEMINI_API_KEY not set; cannot generate image")
+        return None
+    model_id = model_id or GEMINI_MODEL_NANO
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_id}:generateContent?key={GEMINI_API_KEY.strip()}"
+    payload = {
+        "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+        "generationConfig": {"responseModalities": ["TEXT", "IMAGE"]},
+    }
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=timeout_sec) as client:
+            r = await client.post(url, json=payload)
+        r.raise_for_status()
+        data = r.json()
+        candidates = data.get("candidates") or []
+        if not candidates:
+            return None
+        parts = candidates[0].get("content", {}).get("parts") or []
+        for part in parts:
+            if "inlineData" in part:
+                b64 = part["inlineData"].get("data")
+                if b64:
+                    return base64.b64decode(b64)
+        return None
+    except Exception as e:
+        logger.warning("Image generation failed: %s", e)
+        return None
+
+
 def parse_json_from_text(text: str) -> Optional[dict]:
     """Extract a single JSON object from model output (handles markdown code blocks)."""
     text = (text or "").strip()

@@ -7,11 +7,13 @@ import ssl
 
 ssl._create_default_https_context = ssl._create_unverified_context
 
-# Set API keys and force NANO to use flash for now to ensure it works
-os.environ["GEMINI_API_KEY"] = "YOUR_API_KEY"
-os.environ["GEMINI_MODEL_NANO"] = "gemini-2.0-flash" 
-# Ensure Diagnostic Agent uses working models too
-os.environ["GEMINI_MODEL_MED"] = "gemini-2.0-flash" 
+# Prefer .env; load if API key not already set
+if "GEMINI_API_KEY" not in os.environ:
+    try:
+        from dotenv import load_dotenv
+        load_dotenv(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".env")))
+    except ImportError:
+        pass
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
