@@ -218,7 +218,11 @@ class VirtualDoctorAgent(BaseAgent):
             MIME type of the uploaded image (default: image/jpeg).
         """
         # ── Image analysis path ──────────────────────────────────────
-        if image_data is not None:
+        has_image = (
+            image_data is not None
+            and (not isinstance(image_data, str) or image_data.strip())
+        )
+        if has_image:
             return await self._handle_image_analysis(
                 session_id, query, context, image_data, image_mime_type,
             )
@@ -248,12 +252,19 @@ class VirtualDoctorAgent(BaseAgent):
 
         # ── General consultation / symptom assessment ────────────────
         system_prompt = self._build_system_prompt(intent)
+        # Count how many times we've already replied (assistant turns) so we cap at 3 follow-ups
+        assistant_turns = sum(1 for t in context if (t.get("role") or "").lower() in ("assistant", "model"))
+        user_asks_medication = any(
+            w in query.lower() for w in ["medication", "medicine", "what to take", "what can i use", "what can i take", "pill", "relief"]
+        )
+        follow_up_hint = self._get_follow_up_hint(assistant_turns, user_asks_medication)
         messages = self._build_messages(
             system_prompt=system_prompt,
             context=context,
             memory_snippets=memory_snippets,
             web_context=web_context,
             user_query=query,
+            extra_system_hint=follow_up_hint,
         )
 
         llm = self._get_llm_client()
@@ -498,6 +509,29 @@ class VirtualDoctorAgent(BaseAgent):
             return HOSPITAL_SEARCH_PROMPT
         return VIRTUAL_DOCTOR_SYSTEM_PROMPT
 
+    def _get_follow_up_hint(self, assistant_turns: int, user_asks_medication: bool) -> Optional[str]:
+        """Return a hint so the model stops after 3 follow-ups and gives assessment/treatment."""
+        if user_asks_medication:
+            return (
+                "[Instruction] The user is asking for medication or treatment. "
+                "Do NOT ask more questions. Provide your brief assessment and recommendation now: "
+                "OTC options (e.g. paracetamol/ibuprofen, follow the label) for mild cases, "
+                "or recommend seeing a doctor for moderate+. Include the disclaimer."
+            )
+        if assistant_turns >= 3:
+            return (
+                "[Instruction] This is your 4th or later response. You have already asked 3 follow-up questions. "
+                "Do NOT ask any more questions. Provide your preliminary assessment and recommendation now: "
+                "treatment/OTC for mild symptoms, or recommend consulting a doctor. Include the disclaimer."
+            )
+        remaining = 3 - assistant_turns
+        if remaining <= 1:
+            return (
+                f"[Instruction] You may ask at most {remaining} more follow-up question(s) in this response. "
+                "After that, give your assessment and treatment recommendation."
+            )
+        return None
+
     def _build_messages(
         self,
         system_prompt: str,
@@ -505,10 +539,13 @@ class VirtualDoctorAgent(BaseAgent):
         memory_snippets: List[str],
         web_context: str,
         user_query: str,
+        extra_system_hint: Optional[str] = None,
     ) -> List[Dict[str, str]]:
         messages: List[Dict[str, str]] = [
             {"role": "system", "content": system_prompt},
         ]
+        if extra_system_hint:
+            messages.append({"role": "system", "content": extra_system_hint})
 
         if memory_snippets:
             mem_block = "\n---\n".join(memory_snippets)
