@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MEDORA – Wellbeing Voice Chat</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #0f0c29 0%, #1a1a3e 40%, #24243e 100%);
+            color: #e0e0e0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .container {
+            text-align: center;
+            max-width: 500px;
+            padding: 2rem;
+        }
+
+        h1 {
+            font-size: 2rem;
+            font-weight: 700;
+            background: linear-gradient(90deg, #7f5af0, #2cb67d);
+            background-clip: text;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 0.5rem;
+        }
+
+        .subtitle {
+            font-size: 0.95rem;
+            color: #94a1b2;
+            margin-bottom: 2.5rem;
+        }
+
+        .mic-btn {
+            width: 140px;
+            height: 140px;
+            border-radius: 50%;
+            border: none;
+            background: linear-gradient(145deg, #7f5af0, #6246ea);
+            color: white;
+            font-size: 3.5rem;
+            cursor: pointer;
+            box-shadow: 0 0 40px rgba(127, 90, 240, 0.3);
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 2rem;
+        }
+
+        .mic-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 60px rgba(127, 90, 240, 0.5);
+        }
+
+        .mic-btn.recording {
+            background: linear-gradient(145deg, #e53170, #ff6198);
+            box-shadow: 0 0 60px rgba(229, 49, 112, 0.5);
+            animation: pulse 1.5s infinite;
+        }
+
+        .mic-btn.processing {
+            background: linear-gradient(145deg, #f59e0b, #d97706);
+            box-shadow: 0 0 40px rgba(245, 158, 11, 0.4);
+            cursor: wait;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                transform: scale(1);
+            }
+
+            50% {
+                transform: scale(1.08);
+            }
+        }
+
+        .status {
+            font-size: 1rem;
+            font-weight: 500;
+            color: #94a1b2;
+            min-height: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .status.active {
+            color: #e53170;
+        }
+
+        .status.processing {
+            color: #f59e0b;
+        }
+
+        .status.done {
+            color: #2cb67d;
+        }
+
+        .status.error {
+            color: #e53170;
+        }
+
+        .live-text {
+            background: rgba(127, 90, 240, 0.1);
+            border: 1px solid rgba(127, 90, 240, 0.3);
+            border-radius: 12px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            min-height: 40px;
+            font-size: 0.9rem;
+            color: #ccc;
+            font-style: italic;
+            display: none;
+        }
+
+        .live-text.visible {
+            display: block;
+        }
+
+        .transcript-box {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            padding: 1.5rem;
+            margin-top: 1rem;
+            text-align: left;
+            backdrop-filter: blur(10px);
+            display: none;
+        }
+
+        .transcript-box.visible {
+            display: block;
+        }
+
+        .transcript-label {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #7f5af0;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+        }
+
+        .transcript-text {
+            font-size: 0.9rem;
+            line-height: 1.6;
+            color: #fffffe;
+        }
+
+        .agent-box {
+            background: rgba(44, 182, 125, 0.08);
+            border: 1px solid rgba(44, 182, 125, 0.2);
+        }
+
+        .agent-box .transcript-label {
+            color: #2cb67d;
+        }
+
+        .indicators {
+            display: flex;
+            gap: 0.75rem;
+            margin-top: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .indicator {
+            padding: 0.35rem 0.8rem;
+            border-radius: 999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .indicator.low {
+            background: rgba(44, 182, 125, 0.2);
+            color: #2cb67d;
+        }
+
+        .indicator.none {
+            background: rgba(148, 161, 178, 0.2);
+            color: #94a1b2;
+        }
+
+        .indicator.moderate {
+            background: rgba(245, 158, 11, 0.2);
+            color: #f59e0b;
+        }
+
+        .indicator.high,
+        .indicator.severe,
+        .indicator.moderately_severe {
+            background: rgba(229, 49, 112, 0.2);
+            color: #e53170;
+        }
+
+        .indicator.mild {
+            background: rgba(245, 158, 11, 0.15);
+            color: #f59e0b;
+        }
+
+        .hint {
+            margin-top: 2rem;
+            font-size: 0.8rem;
+            color: #555;
+        }
+
+        .not-supported {
+            background: rgba(229, 49, 112, 0.15);
+            border: 1px solid rgba(229, 49, 112, 0.3);
+            border-radius: 12px;
+            padding: 1rem;
+            margin: 1rem 0;
+            color: #e53170;
+            font-size: 0.85rem;
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>🧠 MEDORA Wellbeing</h1>
+        <p class="subtitle">Tap the microphone and talk. I'll listen and respond.</p>
+
+        <div class="not-supported" id="notSupported">
+            ⚠️ Your browser doesn't support speech recognition. Please use <b>Google Chrome</b> or <b>Microsoft
+                Edge</b>.
+        </div>
+
+        <button class="mic-btn" id="micBtn" onclick="toggleRecording()">🎤</button>
+        <p class="status" id="status">Tap to start talking</p>
+
+        <!-- Text input fallback -->
+        <div style="display: flex; gap: 0.5rem; margin-bottom: 1.5rem;">
+            <input type="text" id="textInput" placeholder="Or type your message here..." style="flex:1; padding: 0.75rem 1rem; border-radius: 12px; border: 1px solid rgba(255,255,255,0.15);
+                background: rgba(255,255,255,0.05); color: #fffffe; font-family: 'Inter', sans-serif;
+                font-size: 0.9rem; outline: none;" onkeydown="if(event.key==='Enter') sendTyped()">
+            <button onclick="sendTyped()" style="padding: 0.75rem 1.25rem; border-radius: 12px; border: none;
+                background: linear-gradient(145deg, #2cb67d, #1a9a6a); color: white;
+                font-weight: 600; cursor: pointer; font-size: 0.85rem;">Send</button>
+        </div>
+
+        <div class="live-text" id="liveText">Listening...</div>
+
+        <div class="transcript-box" id="userBox">
+            <div class="transcript-label">🎤 You said</div>
+            <div class="transcript-text" id="userText"></div>
+        </div>
+
+        <div class="transcript-box agent-box" id="agentBox">
+            <div class="transcript-label">💬 Counsellor</div>
+            <div class="transcript-text" id="agentText"></div>
+            <div class="indicators" id="indicators"></div>
+        </div>
+
+        <p class="hint">Uses your browser's speech recognition • Audio responses from localhost:8000</p>
+    </div>
+
+    <script>
+        const API_URL = "http://localhost:8000/wellbeing/voice-text";
+
+        // Check for browser speech recognition support
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRecognition) {
+            document.getElementById("notSupported").style.display = "block";
+            document.getElementById("micBtn").style.opacity = "0.3";
+            document.getElementById("micBtn").style.pointerEvents = "none";
+        }
+
+        let recognition = null;
+        let isListening = false;
+        let finalTranscript = "";
+
+        const micBtn = document.getElementById("micBtn");
+        const statusEl = document.getElementById("status");
+        const liveText = document.getElementById("liveText");
+        const userBox = document.getElementById("userBox");
+        const userText = document.getElementById("userText");
+        const agentBox = document.getElementById("agentBox");
+        const agentText = document.getElementById("agentText");
+        const indicators = document.getElementById("indicators");
+
+        function toggleRecording() {
+            if (isListening) {
+                stopListening();
+            } else {
+                startListening();
+            }
+        }
+
+        let manualStop = false;
+        let restartCount = 0;
+        const MAX_RESTARTS = 5;
+
+        function startListening() {
+            if (!SpeechRecognition) return;
+
+            // First check mic permission
+            navigator.mediaDevices.getUserMedia({ audio: true })
+                .then(stream => {
+                    stream.getTracks().forEach(t => t.stop()); // Release immediately
+                    _startRecognition();
+                })
+                .catch(err => {
+                    console.error("Mic permission error:", err);
+                    statusEl.textContent = "⚠️ Microphone blocked! Click the 🔒 icon in Chrome's address bar → Allow microphone";
+                    statusEl.className = "status error";
+                });
+        }
+
+        function _startRecognition() {
+            recognition = new SpeechRecognition();
+            recognition.continuous = true;
+            recognition.interimResults = true;
+            recognition.lang = "en-US";
+            recognition.maxAlternatives = 1;
+
+            finalTranscript = "";
+            manualStop = false;
+            restartCount = 0;
+            let interimTranscript = "";
+
+            recognition.onstart = () => {
+                isListening = true;
+                micBtn.classList.add("recording");
+                micBtn.classList.remove("processing");
+                statusEl.textContent = "🔴 Listening... speak now, tap mic when done";
+                statusEl.className = "status active";
+                liveText.classList.add("visible");
+                liveText.textContent = "Listening...";
+            };
+
+            recognition.onresult = (event) => {
+                interimTranscript = "";
+                for (let i = event.resultIndex; i < event.results.length; i++) {
+                    const transcript = event.results[i][0].transcript;
+                    if (event.results[i].isFinal) {
+                        finalTranscript += transcript + " ";
+                    } else {
+                        interimTranscript += transcript;
+                    }
+                }
+                const displayText = finalTranscript + interimTranscript;
+                liveText.textContent = displayText || "Listening...";
+                liveText.style.color = displayText ? "#fffffe" : "#ccc";
+                liveText.style.fontStyle = displayText ? "normal" : "italic";
+            };
+
+            recognition.onerror = (event) => {
+                console.error("Speech recognition error:", event.error);
+                if (event.error === "no-speech") {
+                    // Don't stop — it will auto-restart via onend
+                    statusEl.textContent = "🔴 Still listening... speak into your microphone";
+                } else if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+                    statusEl.textContent = "⚠️ Microphone blocked! Click 🔒 in address bar → Allow mic";
+                    statusEl.className = "status error";
+                    manualStop = true;
+                    resetUI();
+                } else if (event.error === "aborted") {
+                    // Ignore — happens during restart
+                } else {
+                    statusEl.textContent = "⚠️ " + event.error + " — try the text box instead";
+                    statusEl.className = "status error";
+                }
+            };
+
+            recognition.onend = () => {
+                // If user manually stopped, process the text
+                if (manualStop) {
+                    isListening = false;
+                    liveText.classList.remove("visible");
+                    const text = finalTranscript.trim();
+                    if (text) {
+                        sendText(text);
+                    } else {
+                        statusEl.textContent = "No speech captured. Try using the text box below.";
+                        statusEl.className = "status";
+                        resetUI();
+                    }
+                    return;
+                }
+
+                // Auto-restart if still supposed to be listening
+                if (isListening && restartCount < MAX_RESTARTS) {
+                    restartCount++;
+                    console.log("Auto-restarting recognition, attempt:", restartCount);
+                    try { recognition.start(); } catch (e) { console.error(e); }
+                } else if (restartCount >= MAX_RESTARTS) {
+                    isListening = false;
+                    liveText.classList.remove("visible");
+                    statusEl.textContent = "Mic timed out. Use the text box below.";
+                    statusEl.className = "status";
+                    resetUI();
+                }
+            };
+
+            recognition.start();
+        }
+
+        function stopListening() {
+            manualStop = true;
+            if (recognition) {
+                recognition.stop();
+            }
+            isListening = false;
+            micBtn.classList.remove("recording");
+            micBtn.classList.add("processing");
+            micBtn.innerHTML = "⏳";
+            statusEl.textContent = "⏳ Processing your message...";
+            statusEl.className = "status processing";
+        }
+
+        function resetUI() {
+            micBtn.classList.remove("recording", "processing");
+            micBtn.innerHTML = "🎤";
+        }
+
+        async function sendText(text) {
+            // Show what user said
+            userText.textContent = text;
+            userBox.classList.add("visible");
+
+            micBtn.classList.remove("recording");
+            micBtn.classList.add("processing");
+            micBtn.innerHTML = "⏳";
+            statusEl.textContent = "⏳ Agent is thinking...";
+            statusEl.className = "status processing";
+
+            try {
+                const response = await fetch(API_URL, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        text: text,
+                        session_id: "voice_session_" + Math.floor(Date.now() / 60000),
+                    }),
+                });
+
+                if (!response.ok) {
+                    const errText = await response.text();
+                    throw new Error(errText);
+                }
+
+                const data = await response.json();
+
+                // Show agent reply
+                if (data.agent_text) {
+                    agentText.textContent = data.agent_text;
+                    agentBox.classList.add("visible");
+                }
+
+                // Show wellbeing indicators
+                if (data.metadata) {
+                    indicators.innerHTML = "";
+                    for (const [key, value] of Object.entries(data.metadata)) {
+                        if (key === "confidence") continue;
+                        const pill = document.createElement("span");
+                        pill.className = `indicator ${value}`;
+                        pill.textContent = `${key}: ${value}`;
+                        indicators.appendChild(pill);
+                    }
+                }
+
+                // Decode and play audio
+                if (data.audio_base64) {
+                    const audioBytes = Uint8Array.from(atob(data.audio_base64), c => c.charCodeAt(0));
+                    // Gemini TTS returns audio/wav, gTTS returns audio/mpeg
+                    const mimeType = data.audio_content_type || "audio/wav";
+                    const audioBlob = new Blob([audioBytes], { type: mimeType });
+                    const audioUrl = URL.createObjectURL(audioBlob);
+                    const audio = new Audio(audioUrl);
+
+                    statusEl.textContent = "🔊 Playing response...";
+                    statusEl.className = "status done";
+
+                    audio.onended = () => {
+                        statusEl.textContent = "Tap to talk again";
+                        statusEl.className = "status";
+                    };
+
+                    audio.onerror = (e) => {
+                        console.error("Audio playback error:", e);
+                        statusEl.textContent = "Tap to talk again";
+                        statusEl.className = "status";
+                    };
+
+                    try {
+                        await audio.play();
+                    } catch (playErr) {
+                        console.warn("Autoplay blocked:", playErr);
+                        // Show a play button if autoplay is blocked
+                        statusEl.innerHTML = '🔇 Click <button onclick="this.parentElement.querySelector(\'audio\')?.play(); this.parentElement.textContent=\'🔊 Playing...\';" style="background:#2cb67d;color:white;border:none;padding:4px 12px;border-radius:8px;cursor:pointer;font-weight:600;">▶ Play</button> to hear the response';
+                        const audioEl = document.createElement("audio");
+                        audioEl.src = audioUrl;
+                        statusEl.appendChild(audioEl);
+                    }
+                } else {
+                    statusEl.textContent = "Tap to talk again";
+                    statusEl.className = "status";
+                }
+
+            } catch (err) {
+                console.error("Error:", err);
+                statusEl.textContent = "❌ " + (err.message || "Something went wrong.");
+                statusEl.className = "status error";
+            }
+
+            resetUI();
+        }
+
+        function sendTyped() {
+            const input = document.getElementById("textInput");
+            const text = input.value.trim();
+            if (text) {
+                input.value = "";
+                sendText(text);
+            }
+        }
+    </script>
+</body>
+
+</html>

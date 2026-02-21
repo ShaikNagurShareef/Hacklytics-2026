@@ -33,6 +33,23 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="MEDORA", description="Multi-agent healthcare", lifespan=lifespan)
 
+# CORS – allow browser demo to call the API
+from fastapi.middleware.cors import CORSMiddleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["X-Transcribed-Text", "X-Agent-Text", "X-Agent-Name", "X-Session-Id"],
+)
+
+# Serve the voice demo HTML
+import os
+from fastapi.staticfiles import StaticFiles
+_static_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static")
+if os.path.isdir(_static_dir):
+    app.mount("/static", StaticFiles(directory=_static_dir), name="static")
+
 
 class ChatRequest(BaseModel):
     session_id: str = "default"
@@ -143,17 +160,80 @@ async def wellbeing_voice(
         logger.exception("TTS failed: %s", e)
         raise HTTPException(status_code=500, detail=f"Text-to-speech failed: {e}")
 
-    # ── Step 5: Return audio with metadata headers ───────────────────
-    return Response(
-        content=audio_response,
-        media_type=content_type,
-        headers={
-            "X-Transcribed-Text": transcribed_text[:500],
-            "X-Agent-Text": agent_text[:500],
-            "X-Agent-Name": agent_response.agent_name,
-            "X-Session-Id": session_id,
-        },
-    )
+    # ── Step 5: Return JSON with audio + text ──────────────────────────
+    import base64 as b64mod
+    audio_b64 = b64mod.b64encode(audio_response).decode("utf-8")
+
+    return {
+        "audio_base64": audio_b64,
+        "audio_content_type": content_type,
+        "transcribed_text": transcribed_text,
+        "agent_text": agent_text,
+        "agent_name": agent_response.agent_name,
+        "session_id": session_id,
+        "metadata": agent_response.metadata,
+    }
+
+
+class VoiceTextRequest(BaseModel):
+    """Request for voice-text endpoint: browser handles STT, server handles agent + TTS."""
+    text: str
+    session_id: str = "default"
+
+
+@app.post("/wellbeing/voice-text")
+async def wellbeing_voice_text(req: VoiceTextRequest):
+    """
+    Text-to-speech wellbeing endpoint.
+    The browser handles STT via Web Speech API, sends text here.
+    Server runs the wellbeing agent and returns audio reply.
+    """
+    from app.services.speech import text_to_speech, text_to_speech_gemini
+
+    if not req.text.strip():
+        raise HTTPException(status_code=400, detail="No text provided")
+
+    logger.info("[voice-text] User said: %s", req.text[:120])
+
+    # ── Run the wellbeing agent ──────────────────────────────────────
+    try:
+        agent_response = await wellbeing_agent.invoke(
+            session_id=req.session_id,
+            query=req.text,
+            context=[],
+        )
+        agent_text = agent_response.content
+    except Exception as e:
+        logger.exception("Wellbeing agent failed: %s", e)
+        raise HTTPException(status_code=500, detail="Wellbeing agent error")
+
+    logger.info("[voice-text] Agent reply: %s", agent_text[:120])
+
+    # ── Convert agent reply → audio ──────────────────────────────────
+    try:
+        gemini_audio = await text_to_speech_gemini(agent_text)
+        if gemini_audio is not None:
+            audio_response = gemini_audio
+            content_type = "audio/wav"
+        else:
+            audio_response = await text_to_speech(agent_text)
+            content_type = "audio/mpeg"
+    except Exception as e:
+        logger.exception("TTS failed: %s", e)
+        raise HTTPException(status_code=500, detail=f"Text-to-speech failed: {e}")
+
+    import base64 as b64mod
+    audio_b64 = b64mod.b64encode(audio_response).decode("utf-8")
+
+    return {
+        "audio_base64": audio_b64,
+        "audio_content_type": content_type,
+        "transcribed_text": req.text,
+        "agent_text": agent_text,
+        "agent_name": agent_response.agent_name,
+        "session_id": req.session_id,
+        "metadata": agent_response.metadata,
+    }
 
 
 def _handle_agent_error(e: Exception) -> None:
