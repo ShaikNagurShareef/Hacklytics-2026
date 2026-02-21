@@ -54,6 +54,18 @@ def _generate_sync(gen_model: Any, prompt: str) -> str:
     return response.text.strip()
 
 
+class _LLMClientWrapper:
+    """Wrapper exposing generate(messages) for agents that expect it."""
+
+    async def generate(self, messages: List[Dict[str, Any]], **kwargs: Any) -> str:
+        return await chat(messages, **kwargs)
+
+
+def get_llm_client() -> _LLMClientWrapper:
+    """Return a client object with async generate(messages) for VirtualDoctor/Dietary agents."""
+    return _LLMClientWrapper()
+
+
 async def chat(
     messages: List[Dict[str, Any]],
     model: Optional[str] = None,
