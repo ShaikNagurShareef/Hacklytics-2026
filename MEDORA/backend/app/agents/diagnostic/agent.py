@@ -53,6 +53,7 @@ from app.agents.diagnostic.tools import (
     format_report_header,
     generate_report_id,
     parse_modality_from_llm,
+    generate_pdf_report,
 )
 
 logger = logging.getLogger(__name__)
@@ -445,6 +446,13 @@ class DiagnosticAgent(BaseAgent):
             num_images=num_images,
         )
 
+        # Generate PDF
+        try:
+            pdf_base64 = generate_pdf_report(structured)
+        except Exception as exc:
+            logger.error("PDF generation failed: %s", exc)
+            pdf_base64 = None
+
         # ── Persist to memory ────────────────────────────────────────
         self._store_context(
             session_id, "user",
@@ -465,6 +473,7 @@ class DiagnosticAgent(BaseAgent):
                 "structured_report": structured.model_dump(),
                 "session_id": session_id,
                 "timestamp": datetime.now(tz=timezone.utc).isoformat(),
+                "report_pdf": pdf_base64,
             },
         )
 

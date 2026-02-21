@@ -6,6 +6,11 @@
 .env.*.local
 *.pem
 
+# Logs (may contain sensitive data)
+*.log
+backend/*.log
+frontend/*.log
+
 # =========================
 # Python / FastAPI (Backend)
 # =========================

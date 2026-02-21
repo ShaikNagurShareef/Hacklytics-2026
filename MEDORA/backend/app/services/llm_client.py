@@ -62,6 +62,13 @@ def _generate_sync(gen_model: Any, prompt: str) -> str:
     return response.text.strip()
 
 
+def _generate_stream_sync(gen_model: Any, prompt: str):
+    """Synchronous streaming generate_content; yields text chunks."""
+    for chunk in gen_model.generate_content(prompt, stream=True):
+        if chunk and chunk.text:
+            yield chunk.text
+
+
 class _LLMClientWrapper:
     """Wrapper exposing generate(messages) for agents that expect it."""
 
@@ -109,6 +116,48 @@ async def chat(
         raise
     except Exception as e:
         logger.exception("LLM call failed: %s", e)
+        raise
+
+
+async def chat_stream(
+    messages: List[Dict[str, Any]],
+    model: Optional[str] = None,
+    *,
+    timeout_sec: float = 60.0,
+):
+    """
+    Stream LLM reply as text chunks (async generator).
+    Same model selection as chat().
+    """
+    flash, pro, med, nano = _get_client()
+    use_pro = model in ("pro", "gemini-1.5-pro", GEMINI_MODEL_PRO)
+    use_med = model in ("med", "medgemma", GEMINI_MODEL_MED)
+    use_nano = model in ("nano", "nano-banana", GEMINI_MODEL_NANO)
+    if use_nano:
+        gen_model = nano
+    elif use_med:
+        gen_model = med
+    elif use_pro:
+        gen_model = pro
+    else:
+        gen_model = flash
+    prompt = _messages_to_prompt(messages)
+    try:
+        loop = asyncio.get_event_loop()
+        gen = _generate_stream_sync(gen_model, prompt)
+        while True:
+            try:
+                chunk = await asyncio.wait_for(
+                    loop.run_in_executor(None, lambda g=gen: next(g, None)),
+                    timeout=timeout_sec,
+                )
+            except StopIteration:
+                break
+            if chunk is None:
+                break
+            yield chunk
+    except Exception as e:
+        logger.exception("LLM stream failed: %s", e)
         raise
 
 

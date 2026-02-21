@@ -1,0 +1,77 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: #FFFFFF;
+    --foreground: #111827;
+    --muted: #6B7280;
+    --muted-foreground: #9CA3AF;
+    --border: #E5E7EB;
+    --primary: #0D9488;
+    --primary-foreground: #FFFFFF;
+    --sidebar: #F9FAFB;
+    --sidebar-foreground: #111827;
+    --sidebar-border: #E5E7EB;
+    --user-bubble: #F3F4F6;
+    --hover: #F9FAFB;
+    --active: #F3F4F6;
+    --radius: 16px;
+    --shadow-input: 0 0 0 3px rgba(13, 148, 136, 0.1);
+  }
+  .dark {
+    --background: #0A0A0A;
+    --foreground: #FAFAFA;
+    --muted: #A1A1AA;
+    --muted-foreground: #A1A1AA;
+    --border: #333333;
+    --primary: #14B8A6;
+    --sidebar: #171717;
+    --sidebar-foreground: #FAFAFA;
+    --sidebar-border: #333333;
+    --user-bubble: #262626;
+    --hover: #262626;
+    --active: #262626;
+    --shadow-input: 0 0 0 3px rgba(20, 184, 166, 0.15);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-[var(--border)];
+  }
+  html {
+    @apply scroll-smooth;
+  }
+  body {
+    @apply bg-[var(--background)] text-[var(--foreground)] antialiased font-sans;
+    font-size: 16px;
+    line-height: 1.6;
+  }
+  #root {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  ::selection {
+    background-color: color-mix(in srgb, var(--primary) 20%, transparent);
+    color: var(--foreground);
+  }
+}
+
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: #D1D5DB transparent;
+}
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: #D1D5DB;
+  border-radius: 3px;
+}
+.dark .scrollbar-thin::-webkit-scrollbar-thumb {
+  background: #404040;
+}
