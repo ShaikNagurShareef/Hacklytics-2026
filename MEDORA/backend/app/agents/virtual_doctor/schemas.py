@@ -5,7 +5,7 @@ Pydantic schemas for the Virtual Doctor Agent.
 from __future__ import annotations
 
 from enum import Enum
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
 from pydantic import BaseModel, Field
@@ -89,4 +89,4 @@ class ConsultationSummary(BaseModel):
     recommendations: List[str] = Field(default_factory=list)
     follow_up_needed: bool = False
     nearby_facilities: List[HospitalInfo] = Field(default_factory=list)
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(tz=timezone.utc))
