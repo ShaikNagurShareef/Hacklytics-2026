@@ -130,34 +130,15 @@ async def vision_chat(
 ) -> str:
     """
     Send a text prompt + image to Gemini for multimodal analysis.
-
-    Parameters
-    ----------
-    prompt : str
-        The text instruction / question about the image.
-    image_data : bytes | str
-        Raw image bytes OR a base64-encoded string.
-    mime_type : str
-        MIME type of the image (default: image/jpeg).
-    model : str, optional
-        None = Flash (default), "pro" = Pro model.
-    timeout_sec : float
-        Max seconds to wait for the API response.
-
-    Returns
-    -------
-    str
-        The model's text response about the image.
+    model: None = Flash (default), "pro" = Pro model.
     """
     flash, pro, med, nano = _get_client()
     use_pro = model in ("pro", "gemini-1.5-pro", GEMINI_MODEL_PRO)
     gen_model = pro if use_pro else flash
 
-    # Convert base64 string → bytes if needed
     if isinstance(image_data, str):
         image_data = base64.b64decode(image_data)
 
-    # Build multimodal content: [text_prompt, image_part]
     import google.generativeai as genai
     image_part = {"mime_type": mime_type, "data": image_data}
     content_parts = [prompt, image_part]
