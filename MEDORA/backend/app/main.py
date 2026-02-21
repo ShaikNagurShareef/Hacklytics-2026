@@ -6,15 +6,21 @@ load_dotenv()  # Load .env from backend/ when running uvicorn from backend/
 import logging
 from contextlib import asynccontextmanager
 
+from typing import Optional
+
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
 from app.agents.wellbeing import WellbeingCounsellorAgent
+from app.agents.orchestrator import OrchestratorAgent
+from app.agents.virtual_doctor.agent import VirtualDoctorAgent
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 wellbeing_agent = WellbeingCounsellorAgent()
+orchestrator = OrchestratorAgent()
+virtual_doctor_agent = VirtualDoctorAgent()
 
 
 @asynccontextmanager
@@ -29,6 +35,12 @@ class ChatRequest(BaseModel):
     session_id: str = "default"
     query: str
     context: list = []
+
+
+class ChatRequestWithImage(ChatRequest):
+    """Chat request with optional image for Virtual Doctor image analysis."""
+    image_base64: Optional[str] = None
+    image_mime_type: str = "image/jpeg"
 
 
 class ChatResponse(BaseModel):
@@ -62,4 +74,52 @@ async def wellbeing_chat(req: ChatRequest):
         raise HTTPException(status_code=500, detail=str(e))
     except Exception as e:
         logger.exception("wellbeing chat failed: %s", e)
+        raise HTTPException(status_code=500, detail="Agent error")
+
+
+@app.post("/chat", response_model=ChatResponse)
+async def orchestrator_chat(req: ChatRequest):
+    """Orchestrator: route query to the best agent (Virtual Doctor, Dietary, etc.)."""
+    try:
+        resp = await orchestrator.handle(
+            session_id=req.session_id,
+            query=req.query,
+            context=req.context,
+        )
+        return ChatResponse(
+            agent_name=resp.agent_name,
+            content=resp.content,
+            metadata=resp.metadata,
+        )
+    except RuntimeError as e:
+        if "GEMINI_API_KEY" in str(e):
+            raise HTTPException(status_code=503, detail="LLM not configured (set GEMINI_API_KEY)")
+        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        logger.exception("orchestrator chat failed: %s", e)
+        raise HTTPException(status_code=500, detail="Agent error")
+
+
+@app.post("/virtual-doctor/chat", response_model=ChatResponse)
+async def virtual_doctor_chat(req: ChatRequestWithImage):
+    """Virtual Doctor: text chat or image analysis when image_base64 is provided."""
+    try:
+        resp = await virtual_doctor_agent.invoke(
+            session_id=req.session_id,
+            query=req.query,
+            context=req.context,
+            image_data=req.image_base64,
+            image_mime_type=req.image_mime_type or "image/jpeg",
+        )
+        return ChatResponse(
+            agent_name=resp.agent_name,
+            content=resp.content,
+            metadata=resp.metadata,
+        )
+    except RuntimeError as e:
+        if "GEMINI_API_KEY" in str(e):
+            raise HTTPException(status_code=503, detail="LLM not configured (set GEMINI_API_KEY)")
+        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        logger.exception("virtual doctor chat failed: %s", e)
         raise HTTPException(status_code=500, detail="Agent error")
