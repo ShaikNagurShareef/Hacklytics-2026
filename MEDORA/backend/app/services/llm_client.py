@@ -8,18 +8,17 @@ import json
 import logging
 from typing import Any, Dict, List, Optional, Union
 
-from app.core.config import GEMINI_API_KEY, GEMINI_MODEL_DEFAULT, GEMINI_MODEL_PRO, GEMINI_MODEL_MED
+from app.core.config import GEMINI_API_KEY, GEMINI_MODEL_DEFAULT, GEMINI_MODEL_PRO
 
 logger = logging.getLogger(__name__)
 
 # Lazy import so app starts even without API key
 _gen_model = None
 _gen_model_pro = None
-_gen_model_med = None
 
 
 def _get_client():
-    global _gen_model, _gen_model_pro, _gen_model_med
+    global _gen_model, _gen_model_pro
     if GEMINI_API_KEY is None:
         raise RuntimeError("GEMINI_API_KEY is not set")
     try:
@@ -29,9 +28,7 @@ def _get_client():
             _gen_model = genai.GenerativeModel(GEMINI_MODEL_DEFAULT)
         if _gen_model_pro is None:
             _gen_model_pro = genai.GenerativeModel(GEMINI_MODEL_PRO)
-        if _gen_model_med is None:
-            _gen_model_med = genai.GenerativeModel(GEMINI_MODEL_MED)
-        return _gen_model, _gen_model_pro, _gen_model_med
+        return _gen_model, _gen_model_pro
     except ImportError as e:
         raise RuntimeError("google-generativeai not installed") from e
 
@@ -79,18 +76,11 @@ async def chat(
 ) -> str:
     """
     Send messages to Gemini and return the model reply text.
-    model: None = use default (Flash), "pro" or GEMINI_MODEL_PRO = use Pro, "med" or GEMINI_MODEL_MED = use Med.
+    model: None = use default (Flash), "pro" or GEMINI_MODEL_PRO = use Pro.
     """
-    flash, pro, med = _get_client()
+    flash, pro = _get_client()
     use_pro = model in ("pro", "gemini-1.5-pro", GEMINI_MODEL_PRO)
-    use_med = model in ("med", "medgemma", GEMINI_MODEL_MED)
-    
-    if use_med:
-        gen_model = med
-    elif use_pro:
-        gen_model = pro
-    else:
-        gen_model = flash
+    gen_model = pro if use_pro else flash
     prompt = _messages_to_prompt(messages)
     try:
         reply = await asyncio.wait_for(
@@ -124,34 +114,15 @@ async def vision_chat(
 ) -> str:
     """
     Send a text prompt + image to Gemini for multimodal analysis.
-
-    Parameters
-    ----------
-    prompt : str
-        The text instruction / question about the image.
-    image_data : bytes | str
-        Raw image bytes OR a base64-encoded string.
-    mime_type : str
-        MIME type of the image (default: image/jpeg).
-    model : str, optional
-        None = Flash (default), "pro" = Pro model.
-    timeout_sec : float
-        Max seconds to wait for the API response.
-
-    Returns
-    -------
-    str
-        The model's text response about the image.
+    model: None = Flash (default), "pro" = Pro model.
     """
     flash, pro = _get_client()
     use_pro = model in ("pro", "gemini-1.5-pro", GEMINI_MODEL_PRO)
     gen_model = pro if use_pro else flash
 
-    # Convert base64 string → bytes if needed
     if isinstance(image_data, str):
         image_data = base64.b64decode(image_data)
 
-    # Build multimodal content: [text_prompt, image_part]
     import google.generativeai as genai
     image_part = {"mime_type": mime_type, "data": image_data}
     content_parts = [prompt, image_part]
