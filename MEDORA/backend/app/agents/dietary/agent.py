@@ -15,7 +15,7 @@ from __future__ import annotations
 import json
 import logging
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from app.agents.base import AgentResponse, BaseAgent
@@ -91,7 +91,7 @@ class DietaryAgent(BaseAgent):
                 metadatas=[{
                     "session_id": session_id,
                     "role": role,
-                    "timestamp": datetime.utcnow().isoformat(),
+                    "timestamp": datetime.now(tz=timezone.utc).isoformat(),
                 }],
                 ids=[doc_id],
             )
@@ -209,7 +209,7 @@ class DietaryAgent(BaseAgent):
             metadata={
                 "intent": intent,
                 "session_id": session_id,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(tz=timezone.utc).isoformat(),
             },
         )
 

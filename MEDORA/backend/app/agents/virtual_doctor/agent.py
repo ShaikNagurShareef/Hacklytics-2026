@@ -19,7 +19,7 @@ from __future__ import annotations
 import json
 import logging
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from app.agents.base import AgentResponse, BaseAgent
@@ -93,7 +93,7 @@ class VirtualDoctorAgent(BaseAgent):
                 metadatas=[{
                     "session_id": session_id,
                     "role": role,
-                    "timestamp": datetime.utcnow().isoformat(),
+                    "timestamp": datetime.now(tz=timezone.utc).isoformat(),
                 }],
                 ids=[doc_id],
             )
@@ -266,7 +266,7 @@ class VirtualDoctorAgent(BaseAgent):
             metadata={
                 "intent": intent,
                 "session_id": session_id,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(tz=timezone.utc).isoformat(),
             },
         )
 
@@ -324,7 +324,7 @@ class VirtualDoctorAgent(BaseAgent):
                 "intent": "emergency",
                 "severity": "critical",
                 "session_id": session_id,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(tz=timezone.utc).isoformat(),
             },
         )
 
@@ -358,7 +358,7 @@ class VirtualDoctorAgent(BaseAgent):
             metadata={
                 "intent": "hospital_search",
                 "session_id": session_id,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(tz=timezone.utc).isoformat(),
             },
         )
 
@@ -391,7 +391,7 @@ class VirtualDoctorAgent(BaseAgent):
             metadata={
                 "intent": "first_aid",
                 "session_id": session_id,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(tz=timezone.utc).isoformat(),
             },
         )
 
