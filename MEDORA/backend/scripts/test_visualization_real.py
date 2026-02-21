@@ -8,7 +8,7 @@ import ssl
 ssl._create_default_https_context = ssl._create_unverified_context
 
 # Set API keys and force NANO to use flash for now to ensure it works
-os.environ["GEMINI_API_KEY"] = "REDACTED"
+os.environ["GEMINI_API_KEY"] = "YOUR_API_KEY"
 os.environ["GEMINI_MODEL_NANO"] = "gemini-2.0-flash" 
 # Ensure Diagnostic Agent uses working models too
 os.environ["GEMINI_MODEL_MED"] = "gemini-2.0-flash" 
