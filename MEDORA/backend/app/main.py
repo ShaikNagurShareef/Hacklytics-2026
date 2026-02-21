@@ -8,7 +8,8 @@ from contextlib import asynccontextmanager
 
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
+from fastapi.responses import Response
 from pydantic import BaseModel
 
 from app.agents.wellbeing import WellbeingCounsellorAgent
@@ -77,6 +78,82 @@ async def wellbeing_chat(req: ChatRequest):
     except Exception as e:
         logger.exception("wellbeing chat failed: %s", e)
         raise HTTPException(status_code=500, detail="Agent error")
+
+
+@app.post("/wellbeing/voice")
+async def wellbeing_voice(
+    audio: UploadFile = File(..., description="Audio file from user (webm, wav, mp3, etc.)"),
+    session_id: str = Form("default"),
+):
+    """
+    Speech-to-speech wellbeing counselling endpoint.
+
+    Pipeline:
+      1. Receive audio upload from the user.
+      2. Transcribe audio → text using Gemini STT.
+      3. Run the Wellbeing Counsellor agent on the transcribed text.
+      4. Convert the agent's text reply → audio using TTS.
+      5. Return the audio response to the client.
+
+    The response is an audio/mpeg file (MP3) that the client can play directly.
+    A custom header `X-Transcribed-Text` contains the user's transcribed words.
+    A custom header `X-Agent-Text` contains the agent's text reply.
+    """
+    from app.services.speech import speech_to_text, text_to_speech, text_to_speech_gemini
+
+    # ── Step 1: Read the uploaded audio ──────────────────────────────
+    audio_bytes = await audio.read()
+    mime = audio.content_type or "audio/webm"
+    logger.info("[voice] Received %d bytes of audio (%s)", len(audio_bytes), mime)
+
+    # ── Step 2: Transcribe audio → text ──────────────────────────────
+    try:
+        transcribed_text = await speech_to_text(audio_bytes, mime_type=mime)
+    except Exception as e:
+        logger.exception("STT failed: %s", e)
+        raise HTTPException(status_code=500, detail=f"Speech-to-text failed: {e}")
+
+    if not transcribed_text.strip():
+        raise HTTPException(status_code=400, detail="Could not understand the audio. Please try again.")
+
+    logger.info("[voice] Transcribed: %s", transcribed_text[:120])
+
+    # ── Step 3: Run the wellbeing agent ──────────────────────────────
+    try:
+        agent_response = await wellbeing_agent.invoke(
+            session_id=session_id,
+            query=transcribed_text,
+            context=[],
+        )
+        agent_text = agent_response.content
+    except Exception as e:
+        logger.exception("Wellbeing agent failed: %s", e)
+        raise HTTPException(status_code=500, detail="Wellbeing agent error")
+
+    logger.info("[voice] Agent reply: %s", agent_text[:120])
+
+    # ── Step 4: Convert agent reply → audio ──────────────────────────
+    try:
+        # Try Gemini native TTS first, falls back to gTTS automatically
+        audio_response = await text_to_speech_gemini(agent_text)
+        if audio_response is None:
+            audio_response = await text_to_speech(agent_text)
+        content_type = "audio/mpeg"
+    except Exception as e:
+        logger.exception("TTS failed: %s", e)
+        raise HTTPException(status_code=500, detail=f"Text-to-speech failed: {e}")
+
+    # ── Step 5: Return audio with metadata headers ───────────────────
+    return Response(
+        content=audio_response,
+        media_type=content_type,
+        headers={
+            "X-Transcribed-Text": transcribed_text[:500],
+            "X-Agent-Text": agent_text[:500],
+            "X-Agent-Name": agent_response.agent_name,
+            "X-Session-Id": session_id,
+        },
+    )
 
 
 def _handle_agent_error(e: Exception) -> None:
