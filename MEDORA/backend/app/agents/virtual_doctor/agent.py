@@ -6,6 +6,8 @@ Communicates with users in a natural, empathetic tone to:
   • Provide preliminary consultation and health guidance.
   • Triage severity: if serious → fetch nearest hospital / medical
     centre and suggest first-aid measures.
+  • **Analyse uploaded medical images** (skin conditions, injuries,
+    rashes, etc.) using Gemini Vision.
   • Leverage web search (DuckDuckGo) for up-to-date medical info &
     nearby facility lookup.
   • Persist conversation context in ChromaDB for continuity.
@@ -20,7 +22,7 @@ import json
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from app.agents.base import AgentResponse, BaseAgent
 from app.agents.virtual_doctor.prompts import (
@@ -28,6 +30,7 @@ from app.agents.virtual_doctor.prompts import (
     TRIAGE_PROMPT,
     FIRST_AID_PROMPT,
     HOSPITAL_SEARCH_PROMPT,
+    IMAGE_ANALYSIS_PROMPT,
 )
 from app.agents.virtual_doctor.tools import (
     assess_severity,
@@ -194,6 +197,8 @@ class VirtualDoctorAgent(BaseAgent):
         session_id: str,
         query: str,
         context: List[Dict],
+        image_data: Optional[Union[bytes, str]] = None,
+        image_mime_type: str = "image/jpeg",
     ) -> AgentResponse:
         """
         Main entry-point called by the Orchestrator.
@@ -206,7 +211,18 @@ class VirtualDoctorAgent(BaseAgent):
             The user's latest message.
         context : List[Dict]
             Recent conversation history (list of {role, content} dicts).
+        image_data : bytes | str | None
+            Raw image bytes or base64-encoded string. When provided,
+            the agent uses Gemini Vision to analyse the image.
+        image_mime_type : str
+            MIME type of the uploaded image (default: image/jpeg).
         """
+        # ── Image analysis path ──────────────────────────────────────
+        if image_data is not None:
+            return await self._handle_image_analysis(
+                session_id, query, context, image_data, image_mime_type,
+            )
+
         intent = self._detect_intent(query)
         logger.info("[VirtualDoctorAgent] session=%s  intent=%s", session_id, intent)
 
@@ -266,6 +282,81 @@ class VirtualDoctorAgent(BaseAgent):
             metadata={
                 "intent": intent,
                 "session_id": session_id,
+                "timestamp": datetime.now(tz=timezone.utc).isoformat(),
+            },
+        )
+
+    # ------------------------------------------------------------------
+    # Image analysis handler
+    # ------------------------------------------------------------------
+    async def _handle_image_analysis(
+        self,
+        session_id: str,
+        query: str,
+        context: List[Dict],
+        image_data: Union[bytes, str],
+        image_mime_type: str,
+    ) -> AgentResponse:
+        """
+        Analyse an uploaded medical image using Gemini Vision.
+
+        Combines the image analysis prompt with the user's text query
+        (if any) and sends both to the multimodal Gemini model.
+        """
+        logger.info(
+            "[VirtualDoctorAgent] session=%s  intent=image_analysis",
+            session_id,
+        )
+
+        # Build the vision prompt
+        user_context = query.strip() if query.strip() else "Please analyse this medical image."
+        vision_prompt = (
+            f"{IMAGE_ANALYSIS_PROMPT}\n\n"
+            f"Patient's message: {user_context}"
+        )
+
+        # If there's prior conversation context, include a summary
+        if context:
+            recent = context[-6:]  # last 3 turns
+            history_block = "\n".join(
+                f"{t.get('role', 'user').title()}: {t.get('content', '')}"
+                for t in recent
+            )
+            vision_prompt += (
+                f"\n\nPrior conversation context:\n{history_block}"
+            )
+
+        # Call Gemini Vision
+        try:
+            from app.services.llm_client import vision_chat
+            response_text = await vision_chat(
+                prompt=vision_prompt,
+                image_data=image_data,
+                mime_type=image_mime_type,
+            )
+        except Exception as exc:
+            logger.error("Vision analysis failed: %s", exc)
+            response_text = (
+                "I'm sorry, I wasn't able to analyse the image at this time. "
+                "This could be due to image quality or a temporary issue.\n\n"
+                "Could you please:\n"
+                "1. **Describe what you see** in the image in text\n"
+                "2. **Re-upload** the image (ensure it's well-lit and in focus)\n\n"
+                "I'll do my best to help based on your description."
+            )
+
+        # Persist
+        self._store_context(session_id, "user", f"[Image uploaded] {query}")
+        self._store_context(session_id, "assistant", response_text)
+
+        return AgentResponse(
+            agent_name=self.name,
+            content=response_text,
+            metadata={
+                "intent": "image_analysis",
+                "session_id": session_id,
+                "image_provided": True,
+                "image_mime_type": image_mime_type,
                 "timestamp": datetime.now(tz=timezone.utc).isoformat(),
             },
         )
