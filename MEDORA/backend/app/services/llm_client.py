@@ -8,7 +8,7 @@ import json
 import logging
 from typing import Any, Dict, List, Optional, Union
 
-from app.core.config import GEMINI_API_KEY, GEMINI_MODEL_DEFAULT, GEMINI_MODEL_PRO, GEMINI_MODEL_MED
+from app.core.config import GEMINI_API_KEY, GEMINI_MODEL_DEFAULT, GEMINI_MODEL_PRO, GEMINI_MODEL_MED, GEMINI_MODEL_NANO
 
 logger = logging.getLogger(__name__)
 
@@ -16,10 +16,11 @@ logger = logging.getLogger(__name__)
 _gen_model = None
 _gen_model_pro = None
 _gen_model_med = None
+_gen_model_nano = None
 
 
 def _get_client():
-    global _gen_model, _gen_model_pro, _gen_model_med
+    global _gen_model, _gen_model_pro, _gen_model_med, _gen_model_nano
     if GEMINI_API_KEY is None:
         raise RuntimeError("GEMINI_API_KEY is not set")
     try:
@@ -31,7 +32,9 @@ def _get_client():
             _gen_model_pro = genai.GenerativeModel(GEMINI_MODEL_PRO)
         if _gen_model_med is None:
             _gen_model_med = genai.GenerativeModel(GEMINI_MODEL_MED)
-        return _gen_model, _gen_model_pro, _gen_model_med
+        if _gen_model_nano is None:
+            _gen_model_nano = genai.GenerativeModel(GEMINI_MODEL_NANO)
+        return _gen_model, _gen_model_pro, _gen_model_med, _gen_model_nano
     except ImportError as e:
         raise RuntimeError("google-generativeai not installed") from e
 
@@ -79,13 +82,16 @@ async def chat(
 ) -> str:
     """
     Send messages to Gemini and return the model reply text.
-    model: None = use default (Flash), "pro" or GEMINI_MODEL_PRO = use Pro, "med" or GEMINI_MODEL_MED = use Med.
+    model: None = use default (Flash), "pro" or GEMINI_MODEL_PRO = use Pro, "med" or GEMINI_MODEL_MED = use Med, "nano" or GEMINI_MODEL_NANO = use Nano Banana.
     """
-    flash, pro, med = _get_client()
+    flash, pro, med, nano = _get_client()
     use_pro = model in ("pro", "gemini-1.5-pro", GEMINI_MODEL_PRO)
     use_med = model in ("med", "medgemma", GEMINI_MODEL_MED)
+    use_nano = model in ("nano", "nano-banana", GEMINI_MODEL_NANO)
     
-    if use_med:
+    if use_nano:
+        gen_model = nano
+    elif use_med:
         gen_model = med
     elif use_pro:
         gen_model = pro
