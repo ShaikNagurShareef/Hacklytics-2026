@@ -36,7 +36,6 @@ class _StubCollection:
         where: Dict[str, Any] | None = None,
     ) -> Dict[str, List[List[Any]]]:
         store = _memory[self._name]
-        ids = store["ids"]
         documents = store["documents"]
         metadatas = store["metadatas"]
         if where:
