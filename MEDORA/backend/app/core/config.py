@@ -8,6 +8,7 @@ def get_env(key: str, default: Optional[str] = None) -> Optional[str]:
 
 
 # Gemini
+# Search (optional)
 GEMINI_API_KEY: Optional[str] = get_env("GEMINI_API_KEY")
 # Use model IDs that support generateContent (see https://ai.google.dev/gemini-api/docs/models)
 # Override in .env if your region supports different models (e.g. gemini-1.5-pro).
