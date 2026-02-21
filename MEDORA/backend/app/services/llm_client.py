@@ -8,17 +8,19 @@ import json
 import logging
 from typing import Any, Dict, List, Optional, Union
 
-from app.core.config import GEMINI_API_KEY, GEMINI_MODEL_DEFAULT, GEMINI_MODEL_PRO
+from app.core.config import GEMINI_API_KEY, GEMINI_MODEL_DEFAULT, GEMINI_MODEL_PRO, GEMINI_MODEL_MED, GEMINI_MODEL_NANO
 
 logger = logging.getLogger(__name__)
 
 # Lazy import so app starts even without API key
 _gen_model = None
 _gen_model_pro = None
+_gen_model_med = None
+_gen_model_nano = None
 
 
 def _get_client():
-    global _gen_model, _gen_model_pro
+    global _gen_model, _gen_model_pro, _gen_model_med, _gen_model_nano
     if GEMINI_API_KEY is None:
         raise RuntimeError("GEMINI_API_KEY is not set")
     try:
@@ -28,7 +30,11 @@ def _get_client():
             _gen_model = genai.GenerativeModel(GEMINI_MODEL_DEFAULT)
         if _gen_model_pro is None:
             _gen_model_pro = genai.GenerativeModel(GEMINI_MODEL_PRO)
-        return _gen_model, _gen_model_pro
+        if _gen_model_med is None:
+            _gen_model_med = genai.GenerativeModel(GEMINI_MODEL_MED)
+        if _gen_model_nano is None:
+            _gen_model_nano = genai.GenerativeModel(GEMINI_MODEL_NANO)
+        return _gen_model, _gen_model_pro, _gen_model_med, _gen_model_nano
     except ImportError as e:
         raise RuntimeError("google-generativeai not installed") from e
 
@@ -76,11 +82,21 @@ async def chat(
 ) -> str:
     """
     Send messages to Gemini and return the model reply text.
-    model: None = use default (Flash), "pro" or GEMINI_MODEL_PRO = use Pro.
+    model: None = use default (Flash), "pro" or GEMINI_MODEL_PRO = use Pro, "med" or GEMINI_MODEL_MED = use Med, "nano" or GEMINI_MODEL_NANO = use Nano Banana.
     """
-    flash, pro = _get_client()
+    flash, pro, med, nano = _get_client()
     use_pro = model in ("pro", "gemini-1.5-pro", GEMINI_MODEL_PRO)
-    gen_model = pro if use_pro else flash
+    use_med = model in ("med", "medgemma", GEMINI_MODEL_MED)
+    use_nano = model in ("nano", "nano-banana", GEMINI_MODEL_NANO)
+    
+    if use_nano:
+        gen_model = nano
+    elif use_med:
+        gen_model = med
+    elif use_pro:
+        gen_model = pro
+    else:
+        gen_model = flash
     prompt = _messages_to_prompt(messages)
     try:
         reply = await asyncio.wait_for(
@@ -116,7 +132,7 @@ async def vision_chat(
     Send a text prompt + image to Gemini for multimodal analysis.
     model: None = Flash (default), "pro" = Pro model.
     """
-    flash, pro = _get_client()
+    flash, pro, med, nano = _get_client()
     use_pro = model in ("pro", "gemini-1.5-pro", GEMINI_MODEL_PRO)
     gen_model = pro if use_pro else flash
 
@@ -139,6 +155,46 @@ async def vision_chat(
     except Exception as e:
         logger.exception("Vision LLM call failed: %s", e)
         raise
+
+
+async def generate_image(
+    prompt: str,
+    model_id: Optional[str] = None,
+    *,
+    timeout_sec: float = 60.0,
+) -> Optional[bytes]:
+    """
+    Generate an image from a text prompt using Nano Banana Pro (Gemini image model).
+    Returns image bytes (PNG) or None if generation fails.
+    """
+    if GEMINI_API_KEY is None:
+        logger.warning("GEMINI_API_KEY not set; cannot generate image")
+        return None
+    model_id = model_id or GEMINI_MODEL_NANO
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_id}:generateContent?key={GEMINI_API_KEY.strip()}"
+    payload = {
+        "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+        "generationConfig": {"responseModalities": ["TEXT", "IMAGE"]},
+    }
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=timeout_sec) as client:
+            r = await client.post(url, json=payload)
+        r.raise_for_status()
+        data = r.json()
+        candidates = data.get("candidates") or []
+        if not candidates:
+            return None
+        parts = candidates[0].get("content", {}).get("parts") or []
+        for part in parts:
+            if "inlineData" in part:
+                b64 = part["inlineData"].get("data")
+                if b64:
+                    return base64.b64decode(b64)
+        return None
+    except Exception as e:
+        logger.warning("Image generation failed: %s", e)
+        return None
 
 
 def parse_json_from_text(text: str) -> Optional[dict]:
