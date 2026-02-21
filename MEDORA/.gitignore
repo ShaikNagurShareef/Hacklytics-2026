@@ -1,0 +1,73 @@
+# =========================
+# Secrets & Environments
+# =========================
+.env
+.env.local
+.env.*.local
+*.pem
+
+# =========================
+# Python / FastAPI (Backend)
+# =========================
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environments
+venv/
+.venv/
+env/
+.env_python/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Testing & Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# =========================
+# Node.js / React (Frontend)
+# =========================
+frontend/node_modules/
+frontend/dist/
+frontend/build/
+frontend/.next/
+frontend/out/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.eslintcache
+
+# =========================
+# Databases & Local State
+# =========================
+# SQLite (Agentic Storage)
+*.db
+*.sqlite
+*.sqlite3
+
+# ChromaDB Local Storage / Vector DB Volumes
+chroma_db/
+.chroma/
+chromadata/
+
+# PostgreSQL Docker Volume Mounts (If storing data locally)
+pgdata/
+postgres-data/
+
+# Uploaded Files / Medical Scans (Local Testing)
+backend/uploads/
+backend/app/static/images/
+
+# =========================
+# IDEs & OS Files
+# =========================
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
