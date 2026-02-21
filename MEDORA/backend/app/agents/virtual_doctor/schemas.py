@@ -80,6 +80,13 @@ class HospitalInfo(BaseModel):
     link: Optional[str] = None
 
 
+class ConsultationState(BaseModel):
+    """Per-session state for structured follow-up collection (symptom_assessment / general_consultation)."""
+    current_symptom: Optional[SymptomEntry] = None
+    patient_profile: PatientProfile = Field(default_factory=PatientProfile)
+    phase: str = "collecting_symptom"  # "collecting_symptom" | "ready_for_assessment"
+
+
 class ConsultationSummary(BaseModel):
     """End-of-session summary of the virtual consultation."""
     session_id: str

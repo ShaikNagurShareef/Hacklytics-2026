@@ -31,6 +31,14 @@ from app.agents.virtual_doctor.prompts import (
     FIRST_AID_PROMPT,
     HOSPITAL_SEARCH_PROMPT,
     IMAGE_ANALYSIS_PROMPT,
+    build_consultation_messages,
+)
+from app.agents.virtual_doctor.consultation_state import (
+    get_state,
+    set_state,
+    extract_and_merge,
+    get_remaining_symptom_slots,
+    format_consultation_state_block,
 )
 from app.agents.virtual_doctor.tools import (
     assess_severity,
@@ -245,56 +253,94 @@ class VirtualDoctorAgent(BaseAgent):
         if intent == "first_aid":
             return await self._handle_first_aid(session_id, query, context, memory_snippets)
 
-        # ── Symptom assessment ───────────────────────────────────────
+        # ── Symptom assessment / general consultation (follow-up flow) ─
         web_context = ""
+        assessed_severity = None  # used for symptom_assessment: treatment guidance + triage + metadata
         if intent == "symptom_assessment":
             web_context = await self._search_medical_info(query)
+            assessed_severity = assess_severity(query)
 
-        # ── General consultation / symptom assessment ────────────────
-        system_prompt = self._build_system_prompt(intent)
-        # Count how many times we've already replied (assistant turns) so we cap at 3 follow-ups
-        assistant_turns = sum(1 for t in context if (t.get("role") or "").lower() in ("assistant", "model"))
-        user_asks_medication = any(
-            w in query.lower() for w in ["medication", "medicine", "what to take", "what can i use", "what can i take", "pill", "relief"]
-        )
-        follow_up_hint = self._get_follow_up_hint(assistant_turns, user_asks_medication)
-        messages = self._build_messages(
-            system_prompt=system_prompt,
-            context=context,
-            memory_snippets=memory_snippets,
-            web_context=web_context,
-            user_query=query,
-            extra_system_hint=follow_up_hint,
-        )
+        if intent in ("symptom_assessment", "general_consultation"):
+            state = get_state(session_id)
+            new_state = extract_and_merge(query, context, state)
+            set_state(session_id, new_state)
+            remaining = get_remaining_symptom_slots(new_state)
+            consultation_block = format_consultation_state_block(new_state, remaining)
+            is_follow_up = any(m.get("role") == "user" for m in context)
+            severity_level = (assessed_severity or {}).get("level", "unknown") if assessed_severity else "unknown"
+            ready_for_treatment = len(remaining) == 0
+
+            messages = build_consultation_messages(
+                conversation_history=context[-10:],
+                current_query=query,
+                memory_snippets=memory_snippets,
+                web_context=web_context,
+                is_follow_up=is_follow_up,
+                consultation_state_block=consultation_block,
+                severity_level=severity_level,
+                ready_for_treatment=ready_for_treatment,
+            )
+        else:
+            system_prompt = self._build_system_prompt(intent)
+            messages = self._build_messages(
+                system_prompt=system_prompt,
+                context=context,
+                memory_snippets=memory_snippets,
+                web_context=web_context,
+                user_query=query,
+            )
 
         llm = self._get_llm_client()
         response_text = await llm.generate(messages)
 
-        # Run deterministic severity assessment alongside LLM output
-        if intent == "symptom_assessment":
-            severity = assess_severity(query)
-            if severity["level"] in ("high", "critical"):
-                triage_report = format_triage_report(
-                    TriageResult(
-                        severity=severity["level"],
-                        matched_keywords=severity["matched"],
-                        recommendation=severity["recommendation"],
-                    )
+        # Append triage recommendation when severity is high/critical
+        if intent == "symptom_assessment" and assessed_severity and assessed_severity.get("level") in ("high", "critical"):
+            triage_report = format_triage_report(
+                TriageResult(
+                    severity=assessed_severity["level"],
+                    matched_keywords=assessed_severity.get("matched", []),
+                    recommendation=assessed_severity.get("recommendation", ""),
                 )
-                response_text = f"{response_text}\n\n---\n{triage_report}"
+            )
+            response_text = f"{response_text}\n\n---\n{triage_report}"
 
         # Persist
         self._store_context(session_id, "user", query)
         self._store_context(session_id, "assistant", response_text)
 
+        metadata = {
+            "intent": intent,
+            "session_id": session_id,
+            "timestamp": datetime.now(tz=timezone.utc).isoformat(),
+        }
+        if intent in ("symptom_assessment", "general_consultation"):
+            state = get_state(session_id)
+            remaining = get_remaining_symptom_slots(state)
+            if intent == "symptom_assessment" and assessed_severity:
+                metadata["assessed_severity"] = assessed_severity.get("level", "unknown")
+            if remaining:
+                question_templates = {
+                    "description": "What symptoms are you experiencing?",
+                    "onset": "When did it start?",
+                    "duration": "How long does it last?",
+                    "location": "Where do you feel it?",
+                    "severity_self_rated": "On a scale of 1-10, how severe is it?",
+                }
+                metadata["remaining_questions"] = [question_templates.get(s, s) for s in remaining[:3]]
+            if state.current_symptom:
+                symptom = state.current_symptom
+                metadata["collected_so_far"] = {
+                    "description": (symptom.description or "").strip() or None,
+                    "onset": (symptom.onset or "").strip() or None,
+                    "duration": (symptom.duration or "").strip() or None,
+                    "location": (symptom.location or "").strip() or None,
+                    "severity_self_rated": symptom.severity_self_rated,
+                }
+
         return AgentResponse(
             agent_name=self.name,
             content=response_text,
-            metadata={
-                "intent": intent,
-                "session_id": session_id,
-                "timestamp": datetime.now(tz=timezone.utc).isoformat(),
-            },
+            metadata=metadata,
         )
 
     # ------------------------------------------------------------------
