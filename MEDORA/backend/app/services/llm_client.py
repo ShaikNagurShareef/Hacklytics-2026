@@ -149,7 +149,7 @@ async def vision_chat(
     str
         The model's text response about the image.
     """
-    flash, pro = _get_client()
+    flash, pro, med, nano = _get_client()
     use_pro = model in ("pro", "gemini-1.5-pro", GEMINI_MODEL_PRO)
     gen_model = pro if use_pro else flash
 
