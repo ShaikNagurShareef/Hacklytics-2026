@@ -13,6 +13,13 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
+from io import BytesIO
+import base64
+from reportlab.lib.pagesizes import letter
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib import colors
+
 from app.agents.diagnostic.schemas import (
     BodyRegion,
     DiagnosticReport,
@@ -306,16 +313,67 @@ def format_report_header(
 
 
 def format_critical_alert(critical_findings: List[str]) -> str:
-    """Format the critical findings alert section."""
-    if not critical_findings:
-        return "### ⚠️ CRITICAL FINDINGS\nNo critical findings identified.\n"
+    """Format the critical findings section per ACR Practice Parameter."""
+    from app.agents.diagnostic.acr_report_structure import ACR_CRITICAL_FINDINGS_DISCLAIMER
 
-    lines = ["### 🚨 CRITICAL FINDINGS — IMMEDIATE ATTENTION REQUIRED\n"]
+    if not critical_findings:
+        return "**CRITICAL FINDINGS**\nNone.\n"
+
+    lines = ["**CRITICAL FINDINGS**"]
     for i, finding in enumerate(critical_findings, 1):
-        lines.append(f"**{i}. {finding}** — Requires immediate clinical correlation and action.\n")
-    lines.append(
-        "\n> 🔴 **These findings may require urgent notification of the "
-        "referring physician and/or patient per ACR Practice Parameter "
-        "for Communication of Diagnostic Imaging Findings.**\n"
-    )
+        lines.append(f"{i}. {finding}")
+    lines.append("")
+    lines.append(ACR_CRITICAL_FINDINGS_DISCLAIMER)
     return "\n".join(lines)
+
+
+def generate_pdf_report(report_data: DiagnosticReport) -> str:
+    """
+    Generate a one-page PDF from the structured DiagnosticReport.
+
+    Report content (findings_text) is expected to follow ACR section order
+    defined in acr_report_structure.ACR_SECTIONS. Returns base64-encoded PDF.
+    """
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=letter,
+        leftMargin=50,
+        rightMargin=50,
+        topMargin=40,
+        bottomMargin=40,
+    )
+    styles = getSampleStyleSheet()
+    # Compact styles for one-page fit
+    title_compact = ParagraphStyle(
+        "TitleCompact",
+        parent=styles["Title"],
+        fontSize=14,
+        spaceAfter=6,
+    )
+    body_compact = ParagraphStyle(
+        "BodyCompact",
+        parent=styles["BodyText"],
+        fontSize=9,
+        leading=11,
+        spaceAfter=3,
+    )
+    story = []
+
+    # Render the report text as-is (already one-page ACR format from LLM)
+    for line in report_data.findings_text.split("\n"):
+        line = line.strip()
+        if not line:
+            story.append(Spacer(1, 2))
+            continue
+        # Section headers (##) and inline bold (**text**) for ReportLab HTML
+        html_line = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", line)
+        if line.startswith("## "):
+            story.append(Paragraph(html_line[3:], title_compact))
+        else:
+            story.append(Paragraph(html_line, body_compact))
+
+    doc.build(story)
+    pdf_bytes = buffer.getvalue()
+    buffer.close()
+    return base64.b64encode(pdf_bytes).decode("utf-8")

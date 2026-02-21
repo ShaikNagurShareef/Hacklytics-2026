@@ -151,6 +151,7 @@ class DietaryAgent(BaseAgent):
         session_id: str,
         query: str,
         context: List[Dict],
+        **kwargs: Any,
     ) -> AgentResponse:
         """
         Main entry-point called by the Orchestrator.

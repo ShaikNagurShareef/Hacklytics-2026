@@ -55,6 +55,12 @@ from app.agents.virtual_doctor.schemas import (
 
 logger = logging.getLogger(__name__)
 
+# Fallback when LLM is unavailable (e.g. model 404, API key, timeout)
+LLM_FALLBACK_MESSAGE = (
+    "I'm having a brief technical moment and couldn't complete that. "
+    "Please try again in a moment, or reach out to a healthcare provider if you need help right away."
+)
+
 
 class VirtualDoctorAgent(BaseAgent):
     """Natural-language virtual doctor for preliminary consultations."""
@@ -291,7 +297,11 @@ class VirtualDoctorAgent(BaseAgent):
             )
 
         llm = self._get_llm_client()
-        response_text = await llm.generate(messages)
+        try:
+            response_text = await llm.generate(messages)
+        except Exception as exc:
+            logger.exception("Virtual Doctor LLM failed: %s", exc)
+            response_text = LLM_FALLBACK_MESSAGE
 
         # Append triage recommendation when severity is high/critical
         if intent == "symptom_assessment" and assessed_severity and assessed_severity.get("level") in ("high", "critical"):
@@ -441,7 +451,11 @@ class VirtualDoctorAgent(BaseAgent):
             user_query=query,
         )
         llm = self._get_llm_client()
-        llm_response = await llm.generate(messages)
+        try:
+            llm_response = await llm.generate(messages)
+        except Exception as exc:
+            logger.exception("Virtual Doctor emergency LLM failed: %s", exc)
+            llm_response = "Stay calm. Help is on the way. Follow any first-aid steps below and call emergency services (911 or local equivalent) immediately."
 
         # 3. Search for hospitals (best-effort)
         hospital_info = await self._search_nearby_hospitals("user location")
@@ -495,7 +509,11 @@ class VirtualDoctorAgent(BaseAgent):
             user_query=query,
         )
         llm = self._get_llm_client()
-        response_text = await llm.generate(messages)
+        try:
+            response_text = await llm.generate(messages)
+        except Exception as exc:
+            logger.exception("Virtual Doctor hospital search LLM failed: %s", exc)
+            response_text = LLM_FALLBACK_MESSAGE
 
         self._store_context(session_id, "user", query)
         self._store_context(session_id, "assistant", response_text)
@@ -528,7 +546,11 @@ class VirtualDoctorAgent(BaseAgent):
             user_query=query,
         )
         llm = self._get_llm_client()
-        response_text = await llm.generate(messages)
+        try:
+            response_text = await llm.generate(messages)
+        except Exception as exc:
+            logger.exception("Virtual Doctor first-aid LLM failed: %s", exc)
+            response_text = first_aid if first_aid else LLM_FALLBACK_MESSAGE
 
         self._store_context(session_id, "user", query)
         self._store_context(session_id, "assistant", response_text)

@@ -20,5 +20,5 @@ class BaseAgent(ABC):
         pass
 
     @abstractmethod
-    async def invoke(self, session_id: str, query: str, context: List[Dict]) -> AgentResponse:
+    async def invoke(self, session_id: str, query: str, context: List[Dict], **kwargs: Any) -> AgentResponse:
         pass

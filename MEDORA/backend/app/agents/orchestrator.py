@@ -28,6 +28,8 @@ from app.agents.base import AgentResponse, BaseAgent
 # ── Import all implemented agents ──────────────────────────────────
 from app.agents.dietary.agent import DietaryAgent
 from app.agents.virtual_doctor.agent import VirtualDoctorAgent
+from app.agents.wellbeing.agent import WellbeingCounsellorAgent
+from app.agents.diagnostic.agent import DiagnosticAgent
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +56,20 @@ AGENT_KEYWORDS: Dict[str, List[str]] = {
         "breathing", "health advice", "health concern",
         "prescription", "check-up", "triage",
     ],
+    "Personal Wellbeing Counsellor": [
+        "stress", "anxiety", "depressed", "depression", "sad", "happy",
+        "mood", "feeling", "feel", "tired", "exhausted", "burnout",
+        "counselling", "therapy", "mental health", "emotion", "emotional",
+        "worry", "worried", "panic", "fear", "scared", "lonely", "alone",
+        "relationship", "breakup", "divorce", "grief", "loss", "sleep",
+        "insomnia", "mindfulness", "meditation", "calm", "relax",
+    ],
+    "DiagnosticAgent": [
+        "x-ray", "xray", "ct scan", "mri", "ultrasound", "scan", "imaging",
+        "radiology", "report", "dicom", "mammogram", "oct", "fundus",
+        "retina", "eye scan", "bone scan", "pet scan", "fluoroscopy",
+        "angiogram", "image analysis", "medical image",
+    ],
 }
 
 
@@ -71,6 +87,8 @@ class OrchestratorAgent:
         self._agents: Dict[str, BaseAgent] = {}
         self._register_agent(DietaryAgent())
         self._register_agent(VirtualDoctorAgent())
+        self._register_agent(WellbeingCounsellorAgent())
+        self._register_agent(DiagnosticAgent())
 
         # ── Per-session state ─────────────────────────────────────
         # Tracks which agent is currently handling each session
@@ -197,6 +215,8 @@ class OrchestratorAgent:
         session_id: str,
         query: str,
         context: Optional[List[Dict]] = None,
+        image_data: Optional[str] = None,
+        image_mime_type: str = "image/jpeg",
     ) -> AgentResponse:
         """
         Main entry point.  Routes the query → the right agent → returns
@@ -210,6 +230,10 @@ class OrchestratorAgent:
             The user's natural-language query.
         context : list[dict], optional
             Additional context (e.g. prior turns from the frontend).
+        image_data : str, optional
+            Base64 encoded image data.
+        image_mime_type : str, optional
+            MIME type of the image.
 
         Returns
         -------
@@ -260,18 +284,33 @@ class OrchestratorAgent:
 
         # 5. Invoke the agent
         try:
-            response = await agent.invoke(session_id, query, merged_context)
+            response = await agent.invoke(
+                session_id=session_id,
+                query=query,
+                context=merged_context,
+                image_data=image_data,
+                image_mime_type=image_mime_type,
+            )
         except Exception as exc:
             logger.error(
                 "Agent %s failed for session %s: %s",
                 routed_agent_name, session_id, exc,
             )
-            return AgentResponse(
-                agent_name="Orchestrator",
-                content=(
+            err_str = str(exc).lower()
+            # User-friendly message; avoid exposing internal agent name for LLM/config errors
+            if "404" in err_str or "not found" in err_str or "gemini" in err_str or "api" in err_str:
+                content = (
+                    "Our assistant is having a brief technical moment. "
+                    "Please try again in a few seconds."
+                )
+            else:
+                content = (
                     f"I tried to connect you with our {agent.name} specialist, "
                     f"but encountered an issue. Please try again."
-                ),
+                )
+            return AgentResponse(
+                agent_name="Orchestrator",
+                content=content,
                 metadata={
                     "error": str(exc),
                     "routed_to": routed_agent_name,

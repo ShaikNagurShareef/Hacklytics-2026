@@ -1,8 +1,9 @@
 """
 Pydantic schemas for the Diagnostic Agent.
 
-Covers patient context, imaging study metadata, structured findings,
-and the full radiology / ophthalmology report model.
+Report field order and section names align with the ACR Practice Parameter
+for Communication of Diagnostic Imaging Findings. See acr_report_structure.py
+for the canonical section list and references.
 """
 
 from __future__ import annotations
@@ -119,54 +120,59 @@ class Finding(BaseModel):
     is_critical: bool = False
 
 
-# ── Structured report ────────────────────────────────────────────────
+# ── Structured report (ACR section order: acr_report_structure.ACR_SECTION_KEYS) ─
 
 class DiagnosticReport(BaseModel):
     """
-    Full structured diagnostic imaging report following ACR guidelines.
-
-    This mirrors the format used in hospital PACS/RIS systems.
+    Structured diagnostic imaging report aligned with ACR Practice Parameter
+    for Communication of Diagnostic Imaging Findings (Demographics, Relevant
+    Clinical Information, Body of Report). Field order follows ACR_section_keys.
     """
-    # Header
+
+    # Demographics (ACR)
     report_id: str = Field(..., description="Unique report identifier")
-    study_info: StudyInfo
+    study_info: StudyInfo = Field(..., description="Examination type, modality, body region, date")
     patient_context: Optional[PatientContext] = None
 
-    # Body
+    # Relevant Clinical Information (ACR)
     clinical_indication: str = Field(
         "Not provided",
-        description="Clinical reason for the study",
-    )
-    technique: str = Field(
-        "Standard protocol",
-        description="Imaging technique and parameters used",
+        description="ACR: Relevant clinical information / reason for study",
     )
     comparison: str = Field(
         "No prior studies available for comparison.",
-        description="Reference to prior imaging",
+        description="ACR body: prior studies used for comparison",
     )
+    technique: str = Field(
+        "Standard protocol",
+        description="ACR body: examination scope and technique",
+    )
+
+    # Body of report (ACR: detailed description of findings)
     findings: List[Finding] = Field(
         default_factory=list,
-        description="Systematic findings organised by anatomical structure",
+        description="Structured findings by anatomy (optional; narrative in findings_text)",
     )
     findings_text: str = Field(
         "",
-        description="Full narrative findings text from the AI analysis",
+        description="Full narrative report text in ACR section order",
     )
 
-    # Footer
+    # Impression and recommendations (ACR body)
     impression: str = Field(
         "",
-        description="Summary of key findings and differential diagnosis",
+        description="Synthesis of findings; diagnosis/differential; assessment category",
     )
     recommendations: str = Field(
         "",
-        description="Follow-up actions, additional imaging, referrals",
+        description="Follow-up imaging or management",
     )
+
+    # Critical findings (ACR: timely communication to referring physician/patient)
     urgency: UrgencyLevel = UrgencyLevel.ROUTINE
     critical_findings: List[str] = Field(
         default_factory=list,
-        description="Critical findings requiring immediate notification",
+        description="Findings requiring immediate communication per ACR Practice Parameter",
     )
 
     # Metadata
