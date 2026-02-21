@@ -285,7 +285,8 @@ class DiagnosticAgent(BaseAgent):
             [
                 {"role": "system", "content": DIAGNOSTIC_SYSTEM_PROMPT},
                 {"role": "user", "content": prompt},
-            ]
+            ],
+            model="med"
         )
         return report_text
 

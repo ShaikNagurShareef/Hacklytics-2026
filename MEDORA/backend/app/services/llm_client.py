@@ -6,17 +6,18 @@ import json
 import logging
 from typing import Any, Dict, List, Optional
 
-from app.core.config import GEMINI_API_KEY, GEMINI_MODEL_DEFAULT, GEMINI_MODEL_PRO
+from app.core.config import GEMINI_API_KEY, GEMINI_MODEL_DEFAULT, GEMINI_MODEL_PRO, GEMINI_MODEL_MED
 
 logger = logging.getLogger(__name__)
 
 # Lazy import so app starts even without API key
 _gen_model = None
 _gen_model_pro = None
+_gen_model_med = None
 
 
 def _get_client():
-    global _gen_model, _gen_model_pro
+    global _gen_model, _gen_model_pro, _gen_model_med
     if GEMINI_API_KEY is None:
         raise RuntimeError("GEMINI_API_KEY is not set")
     try:
@@ -26,7 +27,9 @@ def _get_client():
             _gen_model = genai.GenerativeModel(GEMINI_MODEL_DEFAULT)
         if _gen_model_pro is None:
             _gen_model_pro = genai.GenerativeModel(GEMINI_MODEL_PRO)
-        return _gen_model, _gen_model_pro
+        if _gen_model_med is None:
+            _gen_model_med = genai.GenerativeModel(GEMINI_MODEL_MED)
+        return _gen_model, _gen_model_pro, _gen_model_med
     except ImportError as e:
         raise RuntimeError("google-generativeai not installed") from e
 
@@ -74,11 +77,18 @@ async def chat(
 ) -> str:
     """
     Send messages to Gemini and return the model reply text.
-    model: None = use default (Flash), "pro" or GEMINI_MODEL_PRO = use Pro.
+    model: None = use default (Flash), "pro" or GEMINI_MODEL_PRO = use Pro, "med" or GEMINI_MODEL_MED = use Med.
     """
-    flash, pro = _get_client()
+    flash, pro, med = _get_client()
     use_pro = model in ("pro", "gemini-1.5-pro", GEMINI_MODEL_PRO)
-    gen_model = pro if use_pro else flash
+    use_med = model in ("med", "medgemma", GEMINI_MODEL_MED)
+    
+    if use_med:
+        gen_model = med
+    elif use_pro:
+        gen_model = pro
+    else:
+        gen_model = flash
     prompt = _messages_to_prompt(messages)
     try:
         reply = await asyncio.wait_for(
