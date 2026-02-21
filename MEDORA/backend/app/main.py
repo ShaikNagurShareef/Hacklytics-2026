@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from app.agents.wellbeing import WellbeingCounsellorAgent
 from app.agents.orchestrator import OrchestratorAgent
 from app.agents.virtual_doctor.agent import VirtualDoctorAgent
+from app.agents.dietary.agent import DietaryAgent
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -21,6 +22,7 @@ logger = logging.getLogger(__name__)
 wellbeing_agent = WellbeingCounsellorAgent()
 orchestrator = OrchestratorAgent()
 virtual_doctor_agent = VirtualDoctorAgent()
+dietary_agent = DietaryAgent()
 
 
 @asynccontextmanager
@@ -77,6 +79,12 @@ async def wellbeing_chat(req: ChatRequest):
         raise HTTPException(status_code=500, detail="Agent error")
 
 
+def _handle_agent_error(e: Exception) -> None:
+    if "GEMINI_API_KEY" in str(e):
+        raise HTTPException(status_code=503, detail="LLM not configured (set GEMINI_API_KEY)")
+    raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("/chat", response_model=ChatResponse)
 async def orchestrator_chat(req: ChatRequest):
     """Orchestrator: route query to the best agent (Virtual Doctor, Dietary, etc.)."""
@@ -92,9 +100,7 @@ async def orchestrator_chat(req: ChatRequest):
             metadata=resp.metadata,
         )
     except RuntimeError as e:
-        if "GEMINI_API_KEY" in str(e):
-            raise HTTPException(status_code=503, detail="LLM not configured (set GEMINI_API_KEY)")
-        raise HTTPException(status_code=500, detail=str(e))
+        _handle_agent_error(e)
     except Exception as e:
         logger.exception("orchestrator chat failed: %s", e)
         raise HTTPException(status_code=500, detail="Agent error")
@@ -117,9 +123,28 @@ async def virtual_doctor_chat(req: ChatRequestWithImage):
             metadata=resp.metadata,
         )
     except RuntimeError as e:
-        if "GEMINI_API_KEY" in str(e):
-            raise HTTPException(status_code=503, detail="LLM not configured (set GEMINI_API_KEY)")
-        raise HTTPException(status_code=500, detail=str(e))
+        _handle_agent_error(e)
     except Exception as e:
         logger.exception("virtual doctor chat failed: %s", e)
+        raise HTTPException(status_code=500, detail="Agent error")
+
+
+@app.post("/dietary/chat", response_model=ChatResponse)
+async def dietary_chat(req: ChatRequest):
+    """Invoke the Dietary agent (meal plans, nutrition reports, BMR/TDEE)."""
+    try:
+        resp = await dietary_agent.invoke(
+            session_id=req.session_id,
+            query=req.query,
+            context=req.context,
+        )
+        return ChatResponse(
+            agent_name=resp.agent_name,
+            content=resp.content,
+            metadata=resp.metadata,
+        )
+    except RuntimeError as e:
+        _handle_agent_error(e)
+    except Exception as e:
+        logger.exception("dietary chat failed: %s", e)
         raise HTTPException(status_code=500, detail="Agent error")

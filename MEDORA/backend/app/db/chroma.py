@@ -1,12 +1,18 @@
 """ChromaDB client for agent memory. In-memory stub when chromadb is not installed."""
 from __future__ import annotations
 
+import logging
 from typing import Any, Dict, List
 
+logger = logging.getLogger(__name__)
+
+# In-memory store: collection_name -> { "ids": [], "documents": [], "metadatas": [] }
 _memory: Dict[str, Dict[str, List]] = {}
 
 
 class _StubCollection:
+    """Minimal collection interface for add/query used by VirtualDoctor and Dietary agents."""
+
     def __init__(self, name: str) -> None:
         self._name = name
         if name not in _memory:
@@ -55,6 +61,7 @@ _client: _StubChromaClient | None = None
 
 
 def get_chroma_client() -> _StubChromaClient:
+    """Return a Chroma-like client (in-memory stub). Replace with real chromadb when needed."""
     global _client
     if _client is None:
         _client = _StubChromaClient()
