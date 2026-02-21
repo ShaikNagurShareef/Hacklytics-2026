@@ -15,6 +15,7 @@ GEMINI_API_KEY: Optional[str] = get_env("GEMINI_API_KEY")
 GEMINI_MODEL_DEFAULT: str = get_env("GEMINI_MODEL_DEFAULT") or "gemini-2.0-flash"
 GEMINI_MODEL_PRO: str = get_env("GEMINI_MODEL_PRO") or "gemini-2.0-flash"
 GEMINI_MODEL_MED: str = get_env("GEMINI_MODEL_MED") or "medgemma"
+GEMINI_MODEL_NANO: str = get_env("GEMINI_MODEL_NANO") or "nano-banana"
 
 # Search (optional)
 TAVILY_API_KEY: Optional[str] = get_env("TAVILY_API_KEY")
