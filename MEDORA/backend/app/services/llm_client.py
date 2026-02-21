@@ -1,10 +1,12 @@
-"""Gemini LLM client for agents. Uses Flash by default, Pro when model specified."""
+"""Gemini LLM client for agents. Uses Flash by default, Pro when model specified.
+Supports multimodal (text + image) via vision_chat()."""
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from app.core.config import GEMINI_API_KEY, GEMINI_MODEL_DEFAULT, GEMINI_MODEL_PRO
 
@@ -79,6 +81,70 @@ async def chat(
         raise
     except Exception as e:
         logger.exception("LLM call failed: %s", e)
+        raise
+
+
+def _generate_vision_sync(gen_model: Any, content_parts: list) -> str:
+    """Synchronous multimodal generate_content call (run in thread)."""
+    response = gen_model.generate_content(content_parts)
+    if not response or not response.text:
+        return ""
+    return response.text.strip()
+
+
+async def vision_chat(
+    prompt: str,
+    image_data: Union[bytes, str],
+    mime_type: str = "image/jpeg",
+    model: Optional[str] = None,
+    *,
+    timeout_sec: float = 90.0,
+) -> str:
+    """
+    Send a text prompt + image to Gemini for multimodal analysis.
+
+    Parameters
+    ----------
+    prompt : str
+        The text instruction / question about the image.
+    image_data : bytes | str
+        Raw image bytes OR a base64-encoded string.
+    mime_type : str
+        MIME type of the image (default: image/jpeg).
+    model : str, optional
+        None = Flash (default), "pro" = Pro model.
+    timeout_sec : float
+        Max seconds to wait for the API response.
+
+    Returns
+    -------
+    str
+        The model's text response about the image.
+    """
+    flash, pro = _get_client()
+    use_pro = model in ("pro", "gemini-1.5-pro", GEMINI_MODEL_PRO)
+    gen_model = pro if use_pro else flash
+
+    # Convert base64 string → bytes if needed
+    if isinstance(image_data, str):
+        image_data = base64.b64decode(image_data)
+
+    # Build multimodal content: [text_prompt, image_part]
+    import google.generativeai as genai
+    image_part = {"mime_type": mime_type, "data": image_data}
+    content_parts = [prompt, image_part]
+
+    try:
+        reply = await asyncio.wait_for(
+            asyncio.to_thread(_generate_vision_sync, gen_model, content_parts),
+            timeout=timeout_sec,
+        )
+        return reply or ""
+    except asyncio.TimeoutError:
+        logger.warning("Vision LLM call timed out after %s s", timeout_sec)
+        raise
+    except Exception as e:
+        logger.exception("Vision LLM call failed: %s", e)
         raise
 
 
